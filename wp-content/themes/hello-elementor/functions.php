@@ -466,3 +466,70 @@ add_action('wp_footer', function () {
         <?php
     }
 });
+
+function formulario_gasolinera_shortcode() {
+    ob_start();
+    ?>
+    <form method="post">
+        <label for="nombre">Nombre:</label>
+        <input type="text" id="nombre" name="nombre" required><br>
+
+        <label for="latitud">Latitud:</label>
+        <input type="text" id="latitud" name="latitud" required><br>
+
+        <label for="longitud">Longitud:</label>
+        <input type="text" id="longitud" name="longitud" required><br>
+
+        <label for="direccion">Dirección:</label>
+        <input type="text" id="direccion" name="direccion" required><br>
+
+        <label for="direccion">Horario:</label>
+        <input type="text" id="horario" name="horario" required><br>
+
+        <label for="direccion">Telefono:</label>
+        <input type="text" id="telefono" name="telefono" required><br>
+
+        <label for="direccion">Localidad:</label>
+        <input type="text" id="localidad" name="localidad" required><br>
+
+        <label for="direccion">Provincia:</label>
+        <input type="text" id="provincia" name="provincia" required><br>
+
+        <label for="direccion">Comunidad:</label>
+        <input type="text" id="comunidad" name="comunidad" required><br>
+
+        <input type="submit" name="submit" value="Añadir Gasolinera">
+    </form>
+    <?php
+    if (isset($_POST['submit'])) {
+        $nombre = sanitize_text_field($_POST['nombre']);
+        $nuevo_punto = array(
+            'post_title' => $nombre,
+            'post_type' => 'gasolinera',  // Cambio a singular
+            'post_status' => 'publish',
+        );
+
+        // Insertar el nuevo post
+        $post_id = wp_insert_post($nuevo_punto);
+
+        if ($post_id) {
+            // Aquí añadimos los meta campos ACF
+            update_field('nombre', $nombre, $post_id);
+            update_field('latitud', sanitize_text_field($_POST['latitud']), $post_id);
+            update_field('longitud', sanitize_text_field($_POST['longitud']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['direccion']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['horario']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['telefono']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['localidad']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['provincia']), $post_id);
+            update_field('direccion', sanitize_text_field($_POST['comunidad']), $post_id);
+
+            echo '<p>Gasolinera añadida correctamente.</p>';
+        } else {
+            echo '<p>Hubo un error al añadir la gasolinera.</p>';
+        }
+    }
+    return ob_get_clean();
+}
+
+add_shortcode('añadir_gasolinera', 'formulario_gasolinera_shortcode');
