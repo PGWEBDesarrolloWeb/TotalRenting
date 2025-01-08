@@ -31,6 +31,7 @@ Este proyecto incluye:
 4. Asegurarse de que el servidor tenga acceso a la API utilizada para la funcionalidad del mapa.
 5. Verificar la configuración del tema de WordPress para integrar la página modelo como plantilla.
 6. Pueden visitar el sitio en vivo en la url: https://skyblue-elephant-250107.hostingersite.com/
+7. Usuario administrador: contacto@pgweb.com.ve, contraseña: HOlasoy.25
 
 ## Capturas de Pantalla
 Las vistas del diseño y funcionalidad se encuentran disponibles en la carpeta `screenshot/`.
