@@ -261,3 +261,208 @@ if ( ! function_exists( 'hello_elementor_body_open' ) ) {
 		wp_body_open();
 	}
 }
+
+function cargar_google_maps_api() {
+    wp_enqueue_script(
+        'google-maps-api',
+        'https://maps.googleapis.com/maps/api/js?key=AIzaSyAb2J7nxEHlQJ4TNTuTvYHqP5kEF3tVDx8',
+        array(),
+        null,
+        true
+    );
+}
+add_action('wp_enqueue_scripts', 'cargar_google_maps_api');
+
+
+function mostrar_mapa_gasolineras() {
+    ob_start(); ?>
+    <div id="map" style="width: 100%; height: 500px;"></div>
+    <script>
+        function initMap() {
+            var map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 40.416775, lng: -3.703790 }, // Madrid por defecto
+                zoom: 6
+            });
+
+            // Cargar las gasolineras desde WordPress
+            fetch('<?php echo admin_url('admin-ajax.php'); ?>?action=obtener_gasolineras')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(gasolinera => {
+                        new google.maps.Marker({
+                            position: { lat: parseFloat(gasolinera.latitud), lng: parseFloat(gasolinera.longitud) },
+                            map: map,
+                            title: gasolinera.titulo
+                        });
+                    });
+                });
+        }
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+    <?php return ob_get_clean();
+}
+add_shortcode('mapa_gasolineras', 'mostrar_mapa_gasolineras');
+
+
+
+function obtener_gasolineras() {
+    $args = array(
+        'post_type' => 'gasolineras',
+        'posts_per_page' => -1,
+    );
+
+    $query = new WP_Query($args);
+    $gasolineras = array();
+
+    if ($query->have_posts()) {
+        while ($query->have_posts()) {
+            $query->the_post();
+            $gasolineras[] = array(
+                'titulo' => get_the_title(),
+                'latitud' => get_field('latitud'),
+                'longitud' => get_field('longitud'),
+            );
+        }
+    }
+    wp_reset_postdata();
+
+    wp_send_json($gasolineras);
+}
+add_action('wp_ajax_obtener_gasolineras', 'obtener_gasolineras');
+add_action('wp_ajax_nopriv_obtener_gasolineras', 'obtener_gasolineras');
+
+
+add_action('wp_footer', function () {
+    if (is_page('mapa-de-repostaje')) { // slug de la página del mapa de repostaje
+        ?>
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const gasStations = <?php
+                    // Obtener todas las gasolineras desde el CPT
+                    $posts = get_posts([
+                        'post_type' => 'gasolinera',
+                        'posts_per_page' => -1,
+                    ]);
+
+                    $stations = [];
+                    foreach ($posts as $post) {
+                        $stations[] = [
+                            'name' => get_the_title($post),
+                            'lat' => get_post_meta($post->ID, 'latitud', true),
+                            'lng' => get_post_meta($post->ID, 'longitud', true),
+                            'address' => get_post_meta($post->ID, 'direccion', true),
+                            'hours' => get_post_meta($post->ID, 'horario', true),
+                            'phone' => get_post_meta($post->ID, 'telefono', true),
+                        ];
+                    }
+
+                    echo json_encode($stations);
+                ?>;
+
+                const map = new google.maps.Map(document.getElementById("map"), {
+                    zoom: 12,
+                    center: { lat: 40.416775, lng: -3.703790 } // Centro en Madrid (cambia si es necesario)
+                });
+
+                const geocoder = new google.maps.Geocoder();
+                const directionsService = new google.maps.DirectionsService();
+                const directionsRenderer = new google.maps.DirectionsRenderer();
+
+                directionsRenderer.setMap(map);
+
+                const markers = [];
+
+                // Crear los marcadores y mostrarlos en el mapa inicialmente
+                gasStations.forEach(station => {
+                    const marker = new google.maps.Marker({
+                        position: { lat: parseFloat(station.lat), lng: parseFloat(station.lng) },
+                        map: map, // Mostrar en el mapa inicialmente
+                        title: station.name,
+                    });
+
+                    const infoWindowContent = `
+                        <div>
+                            <h3>${station.name}</h3>
+                            <p><strong>Dirección:</strong> ${station.address || "No disponible"}</p>
+                            <p><strong>Horario:</strong> ${station.hours || "No disponible"}</p>
+                            <p><strong>Teléfono:</strong> ${station.phone || "No disponible"}</p>
+                        </div>
+                    `;
+
+                    const infoWindow = new google.maps.InfoWindow({
+                        content: infoWindowContent,
+                    });
+
+                    marker.addListener('click', () => {
+                        infoWindow.open(map, marker);
+                    });
+
+                    markers.push({ marker, station });
+                });
+
+                // Calcular ruta entre origen y destino
+                document.getElementById('calculate-route').addEventListener('click', function () {
+                    const origin = document.getElementById('origin').value;
+                    const destination = document.getElementById('destination').value;
+
+                    if (!origin || !destination) {
+                        alert('Por favor, ingresa ambas direcciones.');
+                        return;
+                    }
+
+                    geocoder.geocode({ address: origin }, function (results, status) {
+                        if (status === 'OK') {
+                            const originLatLng = results[0].geometry.location;
+
+                            geocoder.geocode({ address: destination }, function (results, status) {
+                                if (status === 'OK') {
+                                    const destinationLatLng = results[0].geometry.location;
+
+                                    const routeRequest = {
+                                        origin: originLatLng,
+                                        destination: destinationLatLng,
+                                        travelMode: 'DRIVING'
+                                    };
+
+                                    directionsService.route(routeRequest, function (response, status) {
+                                        if (status === 'OK') {
+                                            directionsRenderer.setDirections(response);
+
+                                            // Ocultar todos los marcadores y mostrar solo los de la ruta
+                                            const routePath = response.routes[0].overview_path;
+
+                                            markers.forEach(({ marker, station }) => {
+                                                const stationLatLng = new google.maps.LatLng(station.lat, station.lng);
+
+                                                const isNearby = routePath.some(point => {
+                                                    const distance = google.maps.geometry.spherical.computeDistanceBetween(
+                                                        point, stationLatLng
+                                                    );
+                                                    return distance <= 5000; // 5km de la ruta
+                                                });
+
+                                                // Si está cerca de la ruta, lo mostramos, de lo contrario lo ocultamos
+                                                if (isNearby) {
+                                                    marker.setMap(map); // Mostrar marcador
+                                                } else {
+                                                    marker.setMap(null); // Ocultar marcador
+                                                }
+                                            });
+                                        } else {
+                                            alert('No se pudo calcular la ruta. Por favor, inténtalo de nuevo.');
+                                        }
+                                    });
+                                } else {
+                                    alert('No se pudo encontrar la dirección de destino.');
+                                }
+                            });
+                        } else {
+                            alert('No se pudo encontrar la dirección de origen.');
+                        }
+                    });
+                });
+            });
+        </script>
+        <?php
+    }
+});
